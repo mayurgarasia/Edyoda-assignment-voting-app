@@ -1,0 +1,88 @@
+[root@ip-172-31-3-74 k8s-specifications]# kubectl get all
+NAME                          READY   STATUS    RESTARTS   AGE
+pod/db-b54cd94f4-hwr7j        1/1     Running   0          12m
+pod/fortune                   2/2     Running   0          10h
+pod/redis-868d64d78-dw77f     1/1     Running   0          12m
+pod/result-5d57b59f4b-p6qzd   1/1     Running   0          12m
+pod/vote-94849dc97-4qhwj      1/1     Running   0          10m
+pod/vote-94849dc97-hq9r2      1/1     Running   0          12m
+pod/vote-94849dc97-v4bj8      1/1     Running   0          10m
+pod/worker-dd46d7584-s6lgd    1/1     Running   0          12m
+
+NAME             TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+service/db       ClusterIP   10.103.219.174   <none>        5432/TCP         12m
+service/redis    ClusterIP   10.109.210.30    <none>        6379/TCP         12m
+service/result   NodePort    10.111.180.117   <none>        5001:31003/TCP   12m
+service/vote     NodePort    10.103.115.176   <none>        5000:31002/TCP   12m
+
+NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/db       1/1     1            1           12m
+deployment.apps/redis    1/1     1            1           12m
+deployment.apps/result   1/1     1            1           12m
+deployment.apps/vote     3/3     3            3           12m
+deployment.apps/worker   1/1     1            1           12m
+
+NAME                                DESIRED   CURRENT   READY   AGE
+replicaset.apps/db-b54cd94f4        1         1         1       12m
+replicaset.apps/redis-868d64d78     1         1         1       12m
+replicaset.apps/result-5d57b59f4b   1         1         1       12m
+replicaset.apps/vote-94849dc97      3         3         3       12m
+replicaset.apps/worker-dd46d7584    1         1         1       12m
+
+
+1) Deleting vote pod.
+# kubectl delete pod vote-94849dc97-hq9r2
+
+Observation: After deleting the pod vote-94849dc97-hq9r2 the frontend still accepted the vote and the frontend showed that the request was handled by another replica pod vote-94849dc97-v4bj8. There was a new replicate pod instance created and the number of vote pod remained 3. The result page showed the updated votes.
+
+2) delete worker pod.
+# kubectl delete pod worker-dd46d7584-s6lgd
+
+Observations: Deleting the worker pod resulted in its status going to Terminating and another worker instance was created and Running. Both the Vote Frontend and Result page refreshed without issue.
+
+3) delete db pod.
+# kubectl delete pod db-b54cd94f4-hwr7j
+
+Observations: Deleting db pod resulted in the result page showing initializing state and previous vote count was lost. Vote frontend page was working however this result was not getting updated in result page. 
+
+To fix the issue step taken was to delete result pod.
+
+The reason the result page was not working was that the db result app used socket to connect to db instance and since the db pod was deleted the socket connection was invalid. The result app did not connnect to the new instance of the db pod. Only after result pod was deleted and it created a new socket connection to the new running db pod instance.
+
+# kubectl delete pod result-5d57b59f4b-p6qzd
+
+A new replica instace of result pod was running and after refresh of result page it showed the actual count of votes.
+
+Jargons learnt: container, pod, swarm.
+
+[root@ip-172-31-3-74 k8s-specifications]# kubectl get all
+NAME                          READY   STATUS        RESTARTS   AGE
+pod/db-b54cd94f4-kf8fh        1/1     Running       0          7m2s
+pod/fortune                   2/2     Running       0          10h
+pod/redis-868d64d78-dw77f     1/1     Running       0          43m
+pod/result-5d57b59f4b-jxbx6   1/1     Running       0          8s
+pod/result-5d57b59f4b-p6qzd   1/1     Terminating   0          43m
+pod/vote-94849dc97-4qhwj      1/1     Running       0          40m
+pod/vote-94849dc97-v4bj8      1/1     Running       0          40m
+pod/vote-94849dc97-vdnf2      1/1     Running       0          28m
+pod/worker-dd46d7584-fvczg    1/1     Running       1          22m
+
+NAME             TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)          AGE
+service/db       ClusterIP   10.103.219.174   <none>        5432/TCP         43m
+service/redis    ClusterIP   10.109.210.30    <none>        6379/TCP         43m
+service/result   NodePort    10.111.180.117   <none>        5001:31003/TCP   43m
+service/vote     NodePort    10.103.115.176   <none>        5000:31002/TCP   43m
+
+NAME                     READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/db       1/1     1            1           43m
+deployment.apps/redis    1/1     1            1           43m
+deployment.apps/result   1/1     1            1           43m
+deployment.apps/vote     3/3     3            3           43m
+deployment.apps/worker   1/1     1            1           43m
+
+NAME                                DESIRED   CURRENT   READY   AGE
+replicaset.apps/db-b54cd94f4        1         1         1       43m
+replicaset.apps/redis-868d64d78     1         1         1       43m
+replicaset.apps/result-5d57b59f4b   1         1         1       43m
+replicaset.apps/vote-94849dc97      3         3         3       43m
+replicaset.apps/worker-dd46d7584    1         1         1       43m
